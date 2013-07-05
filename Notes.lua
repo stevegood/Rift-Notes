@@ -1,6 +1,6 @@
 --[[
 File: Notes.lua
-Author: Steve Good
+Author: Ardoth
 --]]
 
 function saveNoteBuffer()
