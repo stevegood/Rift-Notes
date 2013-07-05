@@ -1,0 +1,15 @@
+Identifier = "Notes"
+Name = "Notes"
+Description = "A simple addon for taking and saving notes while in-game."
+
+Version = "1.0.0"
+Environment = "2.3"
+
+Author = "Steve Good"
+Website = "http://stevegood.org/rift-notes"
+Email = "steve@stevegood.org"
+
+RunOnStartup = {}
+Embed = {}
+Dependencies = {}
+SavedVariables = {}
