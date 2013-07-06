@@ -9,7 +9,11 @@ Author = "Ardoth"
 Website = "https://github.com/stevegood/Rift-Notes/"
 Email = "steve@stevegood.org"
 
-RunOnStartup = {}
+RunOnStartup = {
+	"Notes.lua"
+}
 Embed = {}
 Dependencies = {}
-SavedVariables = {}
+SavedVariables = {
+	_notesText = "account"
+}
