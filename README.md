@@ -15,6 +15,6 @@ A note taking addon for Rift (riftgame.com)
 
 ## Feedback, Bugs, Feature requests
 
-If you find any bugs in the addon [please log them on GitHub]9https://github.com/stevegood/Rift-Notes/issues?state=open).
+If you find any bugs in the addon [please log them on GitHub](https://github.com/stevegood/Rift-Notes/issues?state=open).
 
 Enjoy the addon!
