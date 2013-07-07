@@ -15,5 +15,7 @@ RunOnStartup = {
 Embed = {}
 Dependencies = {}
 SavedVariables = {
-	_notesText = "account"
+	_notesText = "account",
+	_editorX = "account",
+	_editorY = "account"
 }
