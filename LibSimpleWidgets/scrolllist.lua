@@ -1,4 +1,99 @@
--- Helper Functions
+-- Private Functions
+
+local function UpdateScrollbarVisiblity(self)
+  self.scrollbar:SetVisible(self:GetVisible() and self.showScrollbar and self.scrollbarNeeded)
+end
+
+local function SetupItemFrame(self, itemFrame, i)
+  if itemFrame.index == i then
+    return
+  end
+
+  itemFrame.index = i
+
+  local indent = 0
+  local fontSize = self.fontSize
+  local fontColor = {1, 1, 1}
+  local backgroundColor
+  if self.itemSelected[i] then
+    backgroundColor = self.selectionBgColor
+  else
+    backgroundColor = {0, 0, 0, 0}
+  end
+
+  local level = self.levels[i]
+  if level ~= nil then
+    indent = self.indentSize * (level-1)
+    fontSize = self.levelFontSizes[level] or fontSize
+    fontColor = self.levelFontColors[level] or fontColor
+    backgroundColor = self.levelBackgroundColors[level] or backgroundColor
+  end
+
+  local item = self.items[i]
+
+  if item == nil then
+    item = ""
+  end
+
+  itemFrame:SetText(item)
+  itemFrame:SetPoint("LEFT", self, "LEFT", indent, nil)
+  itemFrame:SetFontSize(fontSize)
+  itemFrame:SetFontColor(unpack(fontColor))
+  itemFrame:SetVisible(true)
+  itemFrame.bgFrame:SetBackgroundColor(unpack(backgroundColor))
+  --itemFrame.bgFrame:SetBackgroundColor((i % 10) / 10, (i % 10) / 10, (i % 10) / 10, 1)
+  itemFrame.bgFrame:SetVisible(true)
+end
+
+local function GetFrameRelTop(frame)
+  local layout, position, offset = frame:ReadPoint("TOP")
+  return offset
+end
+
+local function PositionContent(self, offset)
+  if #self.itemFrames > 0 then
+    local diff = offset - self.offset
+
+    local topFrame = self.itemFrames[1]
+    local itemHeight = topFrame:GetHeight()
+
+    if math.abs(diff) > self:GetHeight() then
+      local index = 1 + math.floor(offset / itemHeight)
+      for _, f in ipairs(self.itemFrames) do
+        SetupItemFrame(self, f, index)
+        index = index + 1
+      end
+      topFrame:SetPoint("TOP", self, "TOP", nil, -(offset % itemHeight))
+    elseif diff > 0 then
+      topFrame:SetPoint("TOP", self, "TOP", nil, GetFrameRelTop(topFrame) - diff)
+      while GetFrameRelTop(self.itemFrames[1]) < -itemHeight do
+        local f = table.remove(self.itemFrames, 1)
+        self.itemFrames[1]:SetPoint("TOP", self, "TOP", nil, GetFrameRelTop(f) + itemHeight)
+        local bottomFrame = self.itemFrames[#self.itemFrames]
+        f:SetPoint("TOP", bottomFrame, "BOTTOM")
+        SetupItemFrame(self, f, bottomFrame.index + 1)
+        table.insert(self.itemFrames, f)
+      end
+    elseif diff < 0 then
+      topFrame:SetPoint("TOP", self, "TOP", nil, GetFrameRelTop(topFrame) - diff)
+      while GetFrameRelTop(self.itemFrames[1]) > 0 do
+        local f = table.remove(self.itemFrames)
+        f:SetPoint("TOP", self, "TOP", nil, GetFrameRelTop(self.itemFrames[1]) - itemHeight)
+        self.itemFrames[1]:SetPoint("TOP", f, "BOTTOM")
+        SetupItemFrame(self, f, self.itemFrames[1].index - 1)
+        table.insert(self.itemFrames, 1, f)
+      end
+    end
+  end
+
+  self.offset = offset
+end
+
+local function PositionScrollbar(self)
+  if self.scrollbar:GetVisible() then
+    self.scrollbar:SetPosition(self.offset)
+  end
+end
 
 local function UpdateSelection(self)
   for _, itemFrame in ipairs(self.itemFrames) do
@@ -16,12 +111,30 @@ local function UpdateSelection(self)
   end
 end
 
-
--- Item Frame Events
-
 local function ItemIsSelectable(self, index)
   local selectable = self.levelSelectable[self.levels[index]]
   return selectable == nil or selectable
+end
+
+local function WheelForward(self)
+  if self.contentHeight < self:GetHeight() then
+    return
+  end
+
+  local interval = self.scrollInterval * self.itemFrames[1]:GetHeight()
+  PositionContent(self, math.max(0, self.offset - interval))
+  PositionScrollbar(self)
+end
+
+local function WheelBack(self)
+  if self.contentHeight < self:GetHeight() then
+    return
+  end
+
+  local _, maxOffset = self.scrollbar:GetRange()
+  local interval = self.scrollInterval * self.itemFrames[1]:GetHeight()
+  PositionContent(self, math.min(maxOffset, self.offset + interval))
+  PositionScrollbar(self)
 end
 
 local function ItemClick(self)
@@ -70,80 +183,203 @@ local function ItemMouseOut(self)
   end
 end
 
-local function LayoutItems(self)
-  local height = 0
-  local prevItemFrame
-  for i, item in ipairs(self.items) do
-    local itemFrame = self.itemFrames[i]
-    local bgFrame = itemFrame and itemFrame.bgFrame
-    if not itemFrame then
-      itemFrame = UI.CreateFrame("Text", self:GetName().."Item"..i, self)
-      itemFrame:SetBackgroundColor(0, 0, 0, 0)
-      if prevItemFrame then
-        itemFrame:SetPoint("TOP", prevItemFrame, "BOTTOM")
-      else
-        itemFrame:SetPoint("TOP", self, "TOP")
-      end
-      itemFrame:SetPoint("RIGHT", self, "RIGHT")
-      bgFrame = UI.CreateFrame("Frame", self:GetName().."ItemBG"..i, self)
-      bgFrame:SetLayer(itemFrame:GetLayer()-1)
-      bgFrame:SetPoint("TOP", itemFrame, "TOP")
-      bgFrame:SetPoint("BOTTOM", itemFrame, "BOTTOM")
-      bgFrame:SetPoint("LEFT", self, "LEFT")
-      bgFrame:SetPoint("RIGHT", self, "RIGHT")
-      bgFrame.Event.LeftClick = function() ItemClick(itemFrame) end
-      bgFrame.Event.MouseIn = function() ItemMouseIn(itemFrame) end
-      bgFrame.Event.MouseOut = function() ItemMouseOut(itemFrame) end
-      itemFrame.index = i
-      itemFrame.bgFrame = bgFrame
-      self.itemFrames[i] = itemFrame
-    end
-
-    local level = self.levels[i]
-
-    local indent = 0
-    local fontSize = self.fontSize
-    local fontColor = {1, 1, 1}
-    local backgroundColor
-    if self.itemSelected[i] then
-      backgroundColor = self.selectionBgColor
-    else
-      backgroundColor = {0, 0, 0, 0}
-    end
-    if level then
-      indent = self.indentSize * (level-1)
-      fontSize = self.levelFontSizes[level] or fontSize
-      fontColor = self.levelFontColors[level] or fontColor
-      backgroundColor = self.levelBackgroundColors[level] or backgroundColor
-    end
-
-    itemFrame:SetPoint("LEFT", self, "LEFT", indent, nil)
-    itemFrame:SetFontSize(fontSize)
-    itemFrame:SetFontColor(unpack(fontColor))
-    itemFrame:SetText(item)
-    itemFrame:SetVisible(true)
-    itemFrame.bgFrame:SetBackgroundColor(unpack(backgroundColor))
-    itemFrame.bgFrame:SetVisible(true)
-
-    height = height + itemFrame:GetHeight()
-    prevItemFrame = itemFrame
-  end
-
-  self:SetHeight(height)
-
-  if #self.items < #self.itemFrames then
-    for i = #self.items+1, #self.itemFrames do
-      self.itemFrames[i]:SetVisible(false)
-      self.itemFrames[i].bgFrame:SetVisible(false)
-    end
+local function AcquireItemFrame(self)
+  if #self.itemFramePool > 0 then
+    return table.remove(self.itemFramePool)
+  else
+    local i = #self.itemFramePool + 1
+    local itemFrame = UI.CreateFrame("Text", self:GetName().."Item"..i, self)
+    itemFrame:SetBackgroundColor(0, 0, 0, 0)
+    local bgFrame = UI.CreateFrame("Frame", self:GetName().."ItemBG"..i, self)
+    bgFrame:SetLayer(itemFrame:GetLayer()-1)
+    bgFrame:SetPoint("TOP", itemFrame, "TOP")
+    bgFrame:SetPoint("BOTTOM", itemFrame, "BOTTOM")
+    bgFrame:SetPoint("LEFT", itemFrame, "LEFT")
+    bgFrame:SetPoint("RIGHT", itemFrame, "RIGHT")
+    bgFrame.Event.LeftClick = function() ItemClick(itemFrame) end
+    bgFrame.Event.MouseIn = function() ItemMouseIn(itemFrame) end
+    bgFrame.Event.MouseOut = function() ItemMouseOut(itemFrame) end
+    itemFrame.bgFrame = bgFrame
+    return itemFrame
   end
 end
 
--- Public Functions
+local function ReleaseItemFrame(self, itemFrame)
+  itemFrame:SetVisible(false)
+  itemFrame.index = nil
+  table.insert(self.itemFramePool, itemFrame)
+end
+
+local function SetupItemFrames(self)
+  for _, itemFrame in ipairs(self.itemFrames) do
+    ReleaseItemFrame(self, itemFrame)
+  end
+  self.itemFrames = {}
+
+  if #self.items == 0 then
+    self.contentHeight = 0
+    return
+  end
+
+  local f = AcquireItemFrame(self)
+  f:SetText("X")
+  local itemHeight = f:GetHeight()
+  ReleaseItemFrame(self, f)
+
+  local height = self:GetHeight()
+  local prevItemFrame
+  local i = 1
+
+  while height > -itemHeight and i <= #self.items do
+    local itemFrame = AcquireItemFrame(self)
+    table.insert(self.itemFrames, itemFrame)
+
+    if prevItemFrame then
+      itemFrame:SetPoint("TOP", prevItemFrame, "BOTTOM")
+    else
+      itemFrame:SetPoint("TOP", self, "TOP")
+    end
+    itemFrame:SetPoint("RIGHT", self, "RIGHT")
+
+    SetupItemFrame(self, itemFrame, i)
+
+    height = height - itemFrame:GetHeight()
+    prevItemFrame = itemFrame
+    i = i + 1
+  end
+
+  if prevItemFrame ~= nil then
+    self.contentHeight = prevItemFrame:GetHeight() * #self.items
+  else
+    self.contentHeight = 0
+  end
+end
+
+local function SetupScrolling(self)
+  local maxOffset = self:GetMaxOffset()
+  local offset = self.offset
+
+  if maxOffset == 0 then
+    offset = 0
+    self.scrollbarNeeded = false
+  else
+    if offset > maxOffset then
+      offset = maxOffset
+    end
+    self.scrollbarNeeded = true
+    self.scrollbar:SetRange(0, maxOffset)
+    self.scrollbar:SetThickness(math.max(self:GetHeight() / self.contentHeight * maxOffset, maxOffset / 10))
+  end
+
+  UpdateScrollbarVisiblity(self)
+  PositionContent(self, offset)
+  PositionScrollbar(self)
+
+  local itemRightOffset = 0
+  if self.scrollbar:GetVisible() then
+    itemRightOffset = -self.scrollbar:GetWidth()
+  end
+
+  for _, itemFrame in ipairs(self.itemFrames) do
+    itemFrame:SetPoint("RIGHT", self, "RIGHT", itemRightOffset, nil)
+  end
+end
+
+local function ScrollViewResized(self)
+  if self.lastHeight ~= self:GetHeight() then
+    SetupItemFrames(self)
+    SetupScrolling(self)
+    self.lastHeight = self:GetHeight()
+  end
+end
+
+local function ScrollbarChange(self)
+  PositionContent(self:GetParent(), math.floor(self:GetPosition()))
+end
+
+
+-- Public ScrollView Functions
 
 local function SetBorder(self, width, r, g, b, a)
   Library.LibSimpleWidgets.SetBorder(self, width, r, g, b, a)
 end
+
+local function SetBackgroundColor(self, r, g, b, a)
+  self.bg:SetBackgroundColor(r, g, b, a)
+end
+
+local function SetVisible(self, visible)
+  assert(type(visible) == "boolean", "param 1 must be a boolean!")
+
+  self:SavedSetVisible(visible)
+  UpdateScrollbarVisiblity(self)
+end
+
+local function GetScrollInterval(self)
+  return self.scrollInterval
+end
+
+local function SetScrollInterval(self, interval)
+  assert(type(interval) == "number", "param 1 must be a number!")
+
+  self.scrollInterval = interval
+end
+
+local function GetShowScrollbar(self)
+  return self.showScrollbar
+end
+
+local function SetShowScrollbar(self, show)
+  assert(type(show) == "boolean", "param 1 must be a boolean!")
+
+  self.showScrollbar = show
+  UpdateScrollbarVisiblity(self)
+end
+
+local function GetScrollbarWidth(self)
+  return self.scrollbar:GetWidth()
+end
+
+local function SetScrollbarWidth(self, width)
+  assert(type(width) == "number", "param 1 must be a number!")
+
+  self.scrollbar:SetWidth(width)
+end
+
+local function GetScrollOffset(self)
+  return self.offset
+end
+
+local function ScrollToOffset(self, offset)
+  assert(type(offset) == "number", "param 1 must be a number!")
+  local min, max = self.scrollbar:GetRange()
+  assert(offset >= min and offset <= max, "param 1 must be in the range ["..min..","..max.."]")
+
+  PositionContent(self, offset)
+  PositionScrollbar(self)
+end
+
+local function GetMaxOffset(self)
+  return math.max(0, self.contentHeight - self:GetHeight())
+end
+
+local function EnsureIndexVisible(self, index)
+  assert(type(index) == "number", "param 1 must be a number!")
+  assert(index >= 1 and index <= #self.items, "param 1 must be in the range [1,"..#self.items.."]")
+
+  local itemHeight = self.itemFrames[1]:GetHeight()
+  local offset = (index - 1) * itemHeight
+  if offset > self.offset + self:GetHeight() - itemHeight then
+    offset = offset - self:GetHeight() + itemHeight
+  elseif offset > self.offset then
+    offset = self.offset
+  end
+
+  self:ScrollToOffset(math.max(0, offset))
+end
+
+
+-- Public List Functions
 
 local function GetFontSize(self)
   return self.fontSize
@@ -153,7 +389,8 @@ local function SetFontSize(self, size)
   assert(type(size) == "number", "param 1 must be a number!")
 
   self.fontSize = size
-  LayoutItems(self)
+  SetupItemFrames(self)
+  SetupScrolling(self)
 end
 
 local function GetSelectionBackgroundColor(self)
@@ -169,7 +406,7 @@ local function SetLevelIndentSize(self, size)
   assert(type(size) == "number", "param 1 must be a number!")
 
   self.indentSize = size
-  LayoutItems(self)
+  SetupItemFrames(self)
 end
 
 local function SetLevelFontSize(self, level, size)
@@ -177,17 +414,18 @@ local function SetLevelFontSize(self, level, size)
   assert(type(size) == "number", "param 2 must be a number!")
 
   self.levelFontSizes[level] = size
-  LayoutItems(self)
+  SetupItemFrames(self)
+  SetupScrolling(self)
 end
 
 local function SetLevelFontColor(self, level, r, g, b)
   self.levelFontColors[level] = {r, g, b}
-  LayoutItems(self)
+  SetupItemFrames(self)
 end
 
 local function SetLevelBackgroundColor(self, level, r, g, b, a)
   self.levelBackgroundColors[level] = {r, g, b, a}
-  LayoutItems(self)
+  SetupItemFrames(self)
 end
 
 local function SetLevelSelectable(self, level, selectable)
@@ -231,7 +469,10 @@ local function SetItems(self, items, values, levels)
   self.values = values or {}
   self.levels = levels or {}
 
-  LayoutItems(self)
+  self.offset = 0
+
+  SetupItemFrames(self)
+  SetupScrolling(self)
 end
 
 local function GetValues(self)
@@ -269,7 +510,7 @@ local function SetSelectedItem(self, item, silent)
     end
   end
 
-  self:ClearSelection(silent)
+  self:SetSelectedIndex(nil, silent)
 end
 
 local function GetSelectedValue(self)
@@ -294,7 +535,7 @@ local function SetSelectedValue(self, value, silent)
     end
   end
 
-  self:ClearSelection(silent)
+  self:SetSelectedIndex(nil, silent)
 end
 
 local function GetSelectedIndex(self)
@@ -428,7 +669,7 @@ local function GetSelectedIndices(self)
       table.insert(indices, i)
     end
   end
-  
+
   return indices
 end
 
@@ -537,19 +778,35 @@ local function SetSelectedValues(self, values, silent)
   self:SetSelectedIndices(indices, silent)
 end
 
+local function GetMaxWidth(self)
+  local maxWidth = 0
+  local f = AcquireItemFrame(self)
+  for i, item in ipairs(self.items) do
+    f:SetText(item)
+    maxWidth = math.max(maxWidth, f:GetWidth())
+  end
+  ReleaseItemFrame(self, f)
+  return maxWidth
+end
 
--- Constructor Function
 
-function Library.LibSimpleWidgets.List(name, parent)
-  local widget = UI.CreateFrame("Frame", name, parent)
-  widget:SetBackgroundColor(0, 0, 0, 1)
+-- Constructor Functions
 
+function Library.LibSimpleWidgets.ScrollList(name, parent)
+  local widget = UI.CreateFrame("Mask", name, parent)
+  widget.bg = UI.CreateFrame("Frame", name.."BG", widget)
+  widget.scrollbar = UI.CreateFrame("RiftScrollbar", name.."Scrollbar", widget)
+
+  widget.scrollInterval = 3
+  widget.showScrollbar = true
+  widget.scrollbarNeeded = false
   widget.enabled = true
   widget.fontSize = 12
   widget.selectionBgColor = {0, 0, 0.5, 1}
   widget.items = {}
   widget.values = {}
   widget.levels = {}
+  widget.itemFramePool = {}
   widget.itemFrames = {}
   widget.itemSelected = {}
   widget.indentSize = 10
@@ -560,7 +817,39 @@ function Library.LibSimpleWidgets.List(name, parent)
   widget.selectedIndex = nil
   widget.selectionMode = "single"
 
+  widget.Event.WheelBack = WheelBack
+  widget.Event.WheelForward = WheelForward
+  widget.Event.Size = ScrollViewResized
+
+  widget.bg:SetAllPoints(widget)
+  widget.bg:SetLayer(-10)
+  widget.bg:SetBackgroundColor(0, 0, 0, 0)
+
+  widget.scrollbar.scrollview = widget
+  widget.scrollbar:SetOrientation("vertical")
+  widget.scrollbar:SetLayer(10)
+  widget.scrollbar:SetPoint("TOPRIGHT", widget, "TOPRIGHT", 0, 0)
+  widget.scrollbar:SetPoint("BOTTOMRIGHT", widget, "BOTTOMRIGHT", 0, 0)
+  widget.scrollbar.Event.ScrollbarChange = ScrollbarChange
+
+  widget.SavedSetVisible = widget.SetVisible
+
+  -- Public API - ScrollView
   widget.SetBorder = SetBorder
+  widget.SetBackgroundColor = SetBackgroundColor
+  widget.SetVisible = SetVisible
+  widget.GetScrollInterval = GetScrollInterval
+  widget.SetScrollInterval = SetScrollInterval
+  widget.GetShowScrollbar = GetShowScrollbar
+  widget.SetShowScrollbar = SetShowScrollbar
+  widget.GetScrollbarWidth = GetScrollbarWidth
+  widget.SetScrollbarWidth = SetScrollbarWidth
+  widget.GetScrollOffset = GetScrollOffset
+  widget.ScrollToOffset = ScrollToOffset
+  widget.GetMaxOffset = GetMaxOffset
+  widget.EnsureIndexVisible = EnsureIndexVisible
+
+  -- Public API - List
   widget.GetFontSize = GetFontSize
   widget.SetFontSize = SetFontSize
   widget.GetEnabled = GetEnabled
@@ -592,8 +881,11 @@ function Library.LibSimpleWidgets.List(name, parent)
   widget.SetSelectedItems = SetSelectedItems
   widget.GetSelectedValues = GetSelectedValues
   widget.SetSelectedValues = SetSelectedValues
+  widget.GetMaxWidth = GetMaxWidth
 
   Library.LibSimpleWidgets.EventProxy(widget, {"ItemClick", "ItemSelect", "SelectionChange"})
+
+  UpdateScrollbarVisiblity(widget)
 
   return widget
 end
