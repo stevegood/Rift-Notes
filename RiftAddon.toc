@@ -12,8 +12,12 @@ Email = "steve@stevegood.org"
 RunOnStartup = {
 	"Notes.lua"
 }
-Embed = {}
-Dependencies = {}
+Embed = {
+	LibSimpleWidgets = true
+}
+Dependencies = {
+	LibSimpleWidgets = {"required", "before"},
+}
 SavedVariables = {
 	_notesText = "account",
 	_editorX = "account",
