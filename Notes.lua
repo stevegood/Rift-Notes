@@ -5,7 +5,7 @@ local context = UI.CreateContext("Notes")
 local notesWindow = UI.CreateFrame("SimpleWindow", "NotesNotesWindow", context)
 local textFrame = UI.CreateFrame("Text","NotesTextFrame",notesWindow:GetContent())
 local inputFieldScroll = UI.CreateFrame("SimpleScrollView", "NotesInputFieldScroll", textFrame)
-local inputField = nil
+local inputField
 local closeButton = UI.CreateFrame("RiftButton", "NotesCloseButton", notesWindow)
 
 local function init()
@@ -51,7 +51,7 @@ local function init()
 	inputFieldScroll:SetHeight(textFrame:GetHeight())
 	inputFieldScroll:SetBorder(1,1,1,1,0.2)
 	inputFieldScroll:SetPoint("TOPLEFT", textFrame, "TOPLEFT", 0, 0)
-	inputField = UI.CreateFrame("RiftTextfield", "NotesInputField", inputFieldScroll)
+	inputField = UI.CreateFrame("SimpleTextArea", "NotesInputField", inputFieldScroll)
 	inputField:SetBackgroundColor(0,0,0,0.5)
 	inputField:SetHeight(inputFieldScroll:GetHeight())
 	inputField:SetText("")
@@ -73,25 +73,6 @@ local function init()
 end
 
 function Notes.OnKeyType(self, _, key)
-	local txt = inputField:GetText()
-	local pos = inputField:GetCursor()
-	-- split txt into two by pos
-	local txtPre = string.sub(txt, 0, pos)
-	local txtPost = string.sub(txt, pos+1)
-	inputField:SetKeyFocus(true) 
-	if key == "\r" then
-		inputField:SetText(txtPre.."\r"..txtPost)
-		inputField:SetCursor(pos+1)
-	elseif key == "\t" then
-		inputField:SetText(txtPre.."\t "..txtPost)
-		inputField:SetCursor(pos+1)
-	end	
-	
-	-- resize inputField
-	_, count = string.gsub(inputField:GetText(), "\r", "\r")
-	local t = inputField:GetText()
-	inputField:SetHeight(math.max(14*(count), 510))
-
 	Notes.saveText(inputField:GetText())
 end
 
@@ -114,9 +95,9 @@ local function AddonSavedVariablesLoadEnd(handle, identifier)
 end
 
 function Notes.toggleEditor()
-	local isOpen = notesWindow:GetVisible()
-	if(isOpen) then
-		Notes.saveText(inputField:GetText())
+	if(notesWindow:GetVisible()) then
+        inputField:SetKeyFocus(false)
+        Notes.saveText(inputField:GetText())
 		
 		local x = notesWindow:GetLeft()
 		local y = notesWindow:GetTop()
@@ -131,15 +112,15 @@ function Notes.toggleEditor()
 
 		_editorX = x
 		_editorY = y
-		
-		notesWindow:SetVisible(false)
 	else
 		local notesText = _notesText
 		if(notesText) then
 			inputField:SetText(notesText)
-		end
-		notesWindow:SetVisible(true)
-	end
+        end
+    end
+
+    -- toggle the window
+    notesWindow:SetVisible(not notesWindow:GetVisible())
 end
 
 Command.Event.Attach(Event.Addon.SavedVariables.Load.End, AddonSavedVariablesLoadEnd, "AddonSavedVariablesLoadEnd")
